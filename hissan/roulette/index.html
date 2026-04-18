@@ -74,17 +74,7 @@
     z-index: 5;
   }
 
-  /* ルーレット中：数字を高速表示 */
-  .numDisplay {
-    font-size: 72px;
-    font-weight: 950;
-    color: #ddd;
-    user-select: none;
-    transition: color .05s;
-    display: none;
-  }
-
-  /* 結果：筆算画像 */
+  /* 筆算画像 */
   .hissanImg {
     max-width: 200px;
     max-height: 180px;
@@ -164,7 +154,6 @@
 
     <div class="stage">
       <div class="card" id="card">
-        <div id="numDisplay" class="numDisplay">1</div>
         <img id="hissanImg" class="hissanImg" src="" alt="ひっ算" />
         <div id="waitMsg" class="waitMsg">スタートを<br>おしてね！</div>
       </div>
@@ -180,21 +169,35 @@
   const IMG_BASE = "../imgs/";
   const TOTAL = 81;
 
-  const card       = document.getElementById("card");
-  const numDisplay = document.getElementById("numDisplay");
-  const hissanImg  = document.getElementById("hissanImg");
-  const waitMsg    = document.getElementById("waitMsg");
-  const mainBtn    = document.getElementById("mainBtn");
+  const card      = document.getElementById("card");
+  const hissanImg = document.getElementById("hissanImg");
+  const waitMsg   = document.getElementById("waitMsg");
+  const mainBtn   = document.getElementById("mainBtn");
 
-  const FAST_INTERVAL    = 55;   // 最速（ms）
-  const SLOW_INTERVAL    = 420;  // 最遅（ms）
-  const SLOWDOWN_STEPS   = 18;   // 減速ステップ数
+  const FAST_INTERVAL  = 55;   // 最速（ms）
+  const SLOW_INTERVAL  = 420;  // 最遅（ms）
+  const SLOWDOWN_STEPS = 18;   // 減速ステップ数
 
-  // フェーズ: 'idle' | 'spinning' | 'stopping'
-  let phase     = "idle";
+  let phase     = "idle";  // 'idle' | 'spinning' | 'stopping'
   let animTimer = null;
   let chosen    = 1;
-  let slowStep  = 0;   // 減速フェーズのカウンタ
+  let slowStep  = 0;
+
+  // --- 画像プリロード ---
+  const imgCache = [];
+  let loadedCount = 0;
+  function preload() {
+    for (let i = 1; i <= TOTAL; i++) {
+      const img = new Image();
+      img.src = IMG_BASE + i + ".png";
+      img.onload = () => { loadedCount++; };
+      imgCache[i] = img;
+    }
+  }
+
+  function randInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
 
   // --- 音 ---
   let audioCtx = null;
@@ -206,7 +209,7 @@
     return audioCtx;
   }
 
-  function tick(vol = 0.04) {
+  function tick(vol = 0.03) {
     const ctx = getAudio();
     if (!ctx) return;
     const now = ctx.currentTime;
@@ -238,53 +241,40 @@
     });
   }
 
-  function randInt(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-  }
-
-  const colors = ["#e0e0e0","#c8d8ff","#ffd8c8","#d0f0c0","#ffe8b0","#f0d0ff"];
-
-  function showNum(n) {
-    waitMsg.style.display    = "none";
-    hissanImg.style.display  = "none";
-    numDisplay.style.display = "block";
-    numDisplay.textContent   = n;
-    numDisplay.style.color   = colors[Math.floor(Math.random() * colors.length)];
-  }
-
-  function showResult(n) {
-    waitMsg.style.display    = "none";
-    numDisplay.style.display = "none";
+  // --- 画像表示 ---
+  function showImg(n, pop = false) {
+    waitMsg.style.display   = "none";
+    hissanImg.style.display = "block";
     hissanImg.src = IMG_BASE + n + ".png";
-    hissanImg.style.display  = "block";
-    hissanImg.classList.remove("pop");
-    void hissanImg.offsetWidth;
-    hissanImg.classList.add("pop");
+    if (pop) {
+      hissanImg.classList.remove("pop");
+      void hissanImg.offsetWidth;
+      hissanImg.classList.add("pop");
+    }
   }
 
-  // 高速スピン中のステップ
+  // 高速スピン
   function fastStep() {
     if (phase !== "spinning") return;
-    showNum(randInt(1, TOTAL));
+    showImg(randInt(1, TOTAL));
     tick(0.03);
     animTimer = setTimeout(fastStep, FAST_INTERVAL);
   }
 
-  // ストップ後の減速ステップ
+  // 減速
   function slowStep_fn() {
     if (phase !== "stopping") return;
     slowStep++;
 
-    // イーズアウトでインターバルを伸ばす
-    const t = slowStep / SLOWDOWN_STEPS;
-    const eased = t * t;
+    const t      = slowStep / SLOWDOWN_STEPS;
+    const eased  = t * t;
     const interval = FAST_INTERVAL + (SLOW_INTERVAL - FAST_INTERVAL) * eased;
 
     if (slowStep >= SLOWDOWN_STEPS) {
       // 完全停止
       phase = "idle";
       card.classList.remove("spinning");
-      showResult(chosen);
+      showImg(chosen, true);
       fanfare();
       mainBtn.textContent = "スタート";
       mainBtn.classList.remove("stopping");
@@ -300,8 +290,8 @@
     } else {
       display = randInt(1, TOTAL);
     }
-    showNum(display);
-    tick(0.02 + 0.02 * (1 - t)); // だんだん小さい音に
+    showImg(display);
+    tick(0.02 + 0.02 * (1 - t));
 
     animTimer = setTimeout(slowStep_fn, interval);
   }
@@ -314,7 +304,6 @@
     mainBtn.classList.remove("stopping");
     mainBtn.classList.add("stop");
     mainBtn.disabled = false;
-    // Start音のために AudioContext を起こす
     getAudio();
     fastStep();
   }
@@ -332,9 +321,11 @@
   }
 
   mainBtn.addEventListener("click", () => {
-    if (phase === "idle")     startSpin();
+    if (phase === "idle")          startSpin();
     else if (phase === "spinning") triggerStop();
   });
+
+  preload();
 </script>
 </body>
 </html>
