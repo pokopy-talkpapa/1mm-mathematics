@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>1ミリ算数</title>
+<style>
+  :root {
+    --bg: #f7f7f7;
+    --panel: #fff;
+    --shadow: 0 8px 20px rgba(0,0,0,.10);
+    --radius: 16px;
+    --dark: #111;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Noto Sans JP", sans-serif;
+    background: var(--bg);
+    color: var(--dark);
+  }
+
+  .wrap {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 16px 12px;
+  }
+
+  h1 {
+    font-size: 26px;
+    font-weight: 950;
+    text-align: center;
+    margin: 0 0 4px;
+  }
+
+  .subtitle {
+    text-align: center;
+    font-size: 13px;
+    color: #888;
+    font-weight: 700;
+    margin: 0 0 24px;
+  }
+
+  .section {
+    margin-bottom: 20px;
+  }
+
+  .sectionTitle {
+    font-size: 13px;
+    font-weight: 900;
+    color: #888;
+    letter-spacing: .06em;
+    margin: 0 0 10px 4px;
+  }
+
+  .appList {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .appCard {
+    background: var(--panel);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 16px 18px;
+    text-decoration: none;
+    color: var(--dark);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: transform .1s ease;
+  }
+
+  .appCard:active { transform: scale(.98); }
+
+  .appIcon {
+    font-size: 28px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .appInfo { flex: 1; min-width: 0; }
+
+  .appName {
+    font-size: 16px;
+    font-weight: 950;
+    margin: 0 0 2px;
+  }
+
+  .appDesc {
+    font-size: 12px;
+    color: #777;
+    font-weight: 700;
+    margin: 0;
+  }
+
+  .arrow {
+    font-size: 18px;
+    color: #ccc;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>1ミリ算数</h1>
+  <p class="subtitle">1mm-mathematics</p>
+
+  <div class="section">
+    <p class="sectionTitle">ひっ算</p>
+    <div class="appList">
+      <a class="appCard" href="./hissan/roulette/">
+        <span class="appIcon">🎰</span>
+        <div class="appInfo">
+          <p class="appName">ひっ算ルーレット</p>
+          <p class="appDesc">ランダムに問題を選ぼう</p>
+        </div>
+        <span class="arrow">›</span>
+      </a>
+      <a class="appCard" href="./hissan/kuri-agari/">
+        <span class="appIcon">➕</span>
+        <div class="appInfo">
+          <p class="appName">くり上がりあり？</p>
+          <p class="appDesc">繰り上がるか・答えを選ぼう</p>
+        </div>
+        <span class="arrow">›</span>
+      </a>
+      <a class="appCard" href="./hissan/tashizan01/">
+        <span class="appIcon">🔢</span>
+        <div class="appInfo">
+          <p class="appName">たし算のひっ算</p>
+          <p class="appDesc">たし算の筆算を練習しよう</p>
+        </div>
+        <span class="arrow">›</span>
+      </a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

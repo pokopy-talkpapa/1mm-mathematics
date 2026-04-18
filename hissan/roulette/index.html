@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>ひっ算ルーレット</title>
+<style>
+  :root {
+    --bg: #f7f7f7;
+    --panel: #ffffff;
+    --shadow: 0 8px 20px rgba(0,0,0,.10);
+    --radius: 16px;
+    --dark: #111;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Noto Sans JP", sans-serif;
+    background: var(--bg);
+    color: var(--dark);
+    touch-action: manipulation;
+  }
+
+  .wrap {
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 12px;
+  }
+
+  .panel {
+    background: var(--panel);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 16px 14px 20px;
+  }
+
+  .title {
+    font-weight: 950;
+    font-size: 20px;
+    margin: 0 0 16px;
+    text-align: center;
+  }
+
+  /* カード表示エリア */
+  .stage {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 300px;
+    min-height: 220px;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 6px 14px rgba(0,0,0,.08);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .card::after {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    border-radius: 10px;
+    border: 3px solid rgba(0,0,0,.05);
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  /* ルーレット中：数字を高速表示 */
+  .numDisplay {
+    font-size: 72px;
+    font-weight: 950;
+    color: #ddd;
+    user-select: none;
+    transition: color .05s;
+    display: none;
+  }
+
+  /* 結果：筆算画像 */
+  .hissanImg {
+    max-width: 200px;
+    max-height: 180px;
+    object-fit: contain;
+    display: none;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,.08));
+  }
+
+  /* 待機中メッセージ */
+  .waitMsg {
+    font-size: 16px;
+    font-weight: 900;
+    color: #bbb;
+    text-align: center;
+    padding: 16px;
+    line-height: 1.6;
+  }
+
+  /* 結果オーバーレイのアニメーション */
+  @keyframes popIn {
+    0%   { transform: scale(0.75); opacity: 0; }
+    70%  { transform: scale(1.05); opacity: 1; }
+    100% { transform: scale(1);    opacity: 1; }
+  }
+
+  .hissanImg.pop {
+    animation: popIn .3s ease forwards;
+  }
+
+  /* カード光るアニメーション */
+  @keyframes glow {
+    0%,100% { box-shadow: 0 6px 14px rgba(0,0,0,.08); }
+    50%      { box-shadow: 0 6px 30px rgba(80,140,255,.35); }
+  }
+
+  .card.spinning {
+    animation: glow .4s ease infinite;
+  }
+
+  /* スタート/ストップボタン */
+  .btnRow {
+    display: flex;
+    justify-content: center;
+  }
+
+  .mainBtn {
+    border: 0;
+    border-radius: 14px;
+    font-weight: 950;
+    cursor: pointer;
+    padding: 16px 0;
+    font-size: 20px;
+    width: 100%;
+    max-width: 300px;
+    background: var(--dark);
+    color: #fff;
+    transition: transform .08s ease, opacity .08s ease;
+  }
+
+  .mainBtn:active { transform: scale(.98); }
+  .mainBtn:disabled { opacity: .5; cursor: not-allowed; }
+
+  .mainBtn.stopping {
+    background: #555;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel">
+    <p class="title">ひっ算ルーレット</p>
+
+    <div class="stage">
+      <div class="card" id="card">
+        <div id="numDisplay" class="numDisplay">1</div>
+        <img id="hissanImg" class="hissanImg" src="" alt="ひっ算" />
+        <div id="waitMsg" class="waitMsg">スタートを<br>おしてね！</div>
+      </div>
+    </div>
+
+    <div class="btnRow">
+      <button id="mainBtn" class="mainBtn" type="button">スタート</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const IMG_BASE = "../imgs/";
+  const TOTAL = 81;
+
+  const card      = document.getElementById("card");
+  const numDisplay= document.getElementById("numDisplay");
+  const hissanImg = document.getElementById("hissanImg");
+  const waitMsg   = document.getElementById("waitMsg");
+  const mainBtn   = document.getElementById("mainBtn");
+
+  // スピン設定
+  const SPIN_DURATION = 2800;   // トータル時間（ms）
+  const FAST_INTERVAL = 60;     // 最速の切り替え間隔（ms）
+  const SLOW_INTERVAL = 380;    // 最遅の切り替え間隔（ms）
+
+  let spinning = false;
+  let animTimer = null;
+  let startTime = 0;
+  let chosen = 1;
+
+  function randInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  // 経過時間に応じてインターバルを計算（イーズアウト）
+  function currentInterval(elapsed) {
+    const t = Math.min(elapsed / SPIN_DURATION, 1);
+    // ease-in-out: 最初は速く、後半は遅く
+    const eased = t * t * (3 - 2 * t); // smoothstep
+    return FAST_INTERVAL + (SLOW_INTERVAL - FAST_INTERVAL) * eased;
+  }
+
+  function showNum(n) {
+    waitMsg.style.display   = "none";
+    hissanImg.style.display = "none";
+    numDisplay.style.display = "block";
+    numDisplay.textContent  = n;
+    // 数字の色をランダムにチラチラさせる
+    const colors = ["#e0e0e0","#c8d8ff","#ffd8c8","#d0f0c0","#ffe8b0"];
+    numDisplay.style.color = colors[Math.floor(Math.random() * colors.length)];
+  }
+
+  function showResult(n) {
+    waitMsg.style.display    = "none";
+    numDisplay.style.display = "none";
+    hissanImg.src = IMG_BASE + n + ".png";
+    hissanImg.style.display = "block";
+    hissanImg.classList.remove("pop");
+    void hissanImg.offsetWidth;
+    hissanImg.classList.add("pop");
+  }
+
+  function spinStep() {
+    if (!spinning) return;
+
+    const elapsed = Date.now() - startTime;
+
+    if (elapsed >= SPIN_DURATION) {
+      // 終了
+      stopSpin();
+      return;
+    }
+
+    // ランダムな番号を表示（最後の数コマは chosen に近づける）
+    const remaining = SPIN_DURATION - elapsed;
+    let display;
+    if (remaining < 600) {
+      // 残り600ms以下：chosen前後の番号をちらつかせる
+      const offset = randInt(-3, 3);
+      display = ((chosen - 1 + offset + TOTAL) % TOTAL) + 1;
+    } else {
+      display = randInt(1, TOTAL);
+    }
+    showNum(display);
+
+    const interval = currentInterval(elapsed);
+    animTimer = setTimeout(spinStep, interval);
+  }
+
+  function startSpin() {
+    spinning = true;
+    startTime = Date.now();
+    chosen = randInt(1, TOTAL);
+
+    card.classList.add("spinning");
+    mainBtn.textContent = "ストップ";
+    mainBtn.classList.add("stopping");
+    mainBtn.disabled = true; // 自動停止なので無効化
+
+    spinStep();
+  }
+
+  function stopSpin() {
+    spinning = false;
+    clearTimeout(animTimer);
+
+    card.classList.remove("spinning");
+    showResult(chosen);
+
+    mainBtn.textContent = "スタート";
+    mainBtn.classList.remove("stopping");
+    mainBtn.disabled = false;
+  }
+
+  mainBtn.addEventListener("click", () => {
+    if (!spinning) startSpin();
+  });
+</script>
+</body>
+</html>
