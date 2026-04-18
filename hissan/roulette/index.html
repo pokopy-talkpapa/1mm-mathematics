@@ -147,8 +147,13 @@
   .mainBtn:active { transform: scale(.98); }
   .mainBtn:disabled { opacity: .5; cursor: not-allowed; }
 
+  .mainBtn.stop {
+    background: #c0392b;
+  }
+
   .mainBtn.stopping {
-    background: #555;
+    background: #888;
+    cursor: not-allowed;
   }
 </style>
 </head>
@@ -175,108 +180,160 @@
   const IMG_BASE = "../imgs/";
   const TOTAL = 81;
 
-  const card      = document.getElementById("card");
-  const numDisplay= document.getElementById("numDisplay");
-  const hissanImg = document.getElementById("hissanImg");
-  const waitMsg   = document.getElementById("waitMsg");
-  const mainBtn   = document.getElementById("mainBtn");
+  const card       = document.getElementById("card");
+  const numDisplay = document.getElementById("numDisplay");
+  const hissanImg  = document.getElementById("hissanImg");
+  const waitMsg    = document.getElementById("waitMsg");
+  const mainBtn    = document.getElementById("mainBtn");
 
-  // スピン設定
-  const SPIN_DURATION = 2800;   // トータル時間（ms）
-  const FAST_INTERVAL = 60;     // 最速の切り替え間隔（ms）
-  const SLOW_INTERVAL = 380;    // 最遅の切り替え間隔（ms）
+  const FAST_INTERVAL    = 55;   // 最速（ms）
+  const SLOW_INTERVAL    = 420;  // 最遅（ms）
+  const SLOWDOWN_STEPS   = 18;   // 減速ステップ数
 
-  let spinning = false;
+  // フェーズ: 'idle' | 'spinning' | 'stopping'
+  let phase     = "idle";
   let animTimer = null;
-  let startTime = 0;
-  let chosen = 1;
+  let chosen    = 1;
+  let slowStep  = 0;   // 減速フェーズのカウンタ
+
+  // --- 音 ---
+  let audioCtx = null;
+  function getAudio() {
+    const Cls = window.AudioContext || window.webkitAudioContext;
+    if (!Cls) return null;
+    if (!audioCtx) audioCtx = new Cls();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  }
+
+  function tick(vol = 0.04) {
+    const ctx = getAudio();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const amp = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(1200, now);
+    amp.gain.setValueAtTime(0.0001, now);
+    amp.gain.exponentialRampToValueAtTime(vol, now + 0.005);
+    amp.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+    osc.connect(amp); amp.connect(ctx.destination);
+    osc.start(now); osc.stop(now + 0.05);
+  }
+
+  function fanfare() {
+    const ctx = getAudio();
+    if (!ctx) return;
+    [[523,0],[659,0.1],[784,0.2],[1047,0.32]].forEach(([f, w]) => {
+      const now = ctx.currentTime + w;
+      const osc = ctx.createOscillator();
+      const amp = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(f, now);
+      amp.gain.setValueAtTime(0.0001, now);
+      amp.gain.exponentialRampToValueAtTime(0.04, now + 0.01);
+      amp.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+      osc.connect(amp); amp.connect(ctx.destination);
+      osc.start(now); osc.stop(now + 0.22);
+    });
+  }
 
   function randInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
-  // 経過時間に応じてインターバルを計算（イーズアウト）
-  function currentInterval(elapsed) {
-    const t = Math.min(elapsed / SPIN_DURATION, 1);
-    // ease-in-out: 最初は速く、後半は遅く
-    const eased = t * t * (3 - 2 * t); // smoothstep
-    return FAST_INTERVAL + (SLOW_INTERVAL - FAST_INTERVAL) * eased;
-  }
+  const colors = ["#e0e0e0","#c8d8ff","#ffd8c8","#d0f0c0","#ffe8b0","#f0d0ff"];
 
   function showNum(n) {
-    waitMsg.style.display   = "none";
-    hissanImg.style.display = "none";
+    waitMsg.style.display    = "none";
+    hissanImg.style.display  = "none";
     numDisplay.style.display = "block";
-    numDisplay.textContent  = n;
-    // 数字の色をランダムにチラチラさせる
-    const colors = ["#e0e0e0","#c8d8ff","#ffd8c8","#d0f0c0","#ffe8b0"];
-    numDisplay.style.color = colors[Math.floor(Math.random() * colors.length)];
+    numDisplay.textContent   = n;
+    numDisplay.style.color   = colors[Math.floor(Math.random() * colors.length)];
   }
 
   function showResult(n) {
     waitMsg.style.display    = "none";
     numDisplay.style.display = "none";
     hissanImg.src = IMG_BASE + n + ".png";
-    hissanImg.style.display = "block";
+    hissanImg.style.display  = "block";
     hissanImg.classList.remove("pop");
     void hissanImg.offsetWidth;
     hissanImg.classList.add("pop");
   }
 
-  function spinStep() {
-    if (!spinning) return;
+  // 高速スピン中のステップ
+  function fastStep() {
+    if (phase !== "spinning") return;
+    showNum(randInt(1, TOTAL));
+    tick(0.03);
+    animTimer = setTimeout(fastStep, FAST_INTERVAL);
+  }
 
-    const elapsed = Date.now() - startTime;
+  // ストップ後の減速ステップ
+  function slowStep_fn() {
+    if (phase !== "stopping") return;
+    slowStep++;
 
-    if (elapsed >= SPIN_DURATION) {
-      // 終了
-      stopSpin();
+    // イーズアウトでインターバルを伸ばす
+    const t = slowStep / SLOWDOWN_STEPS;
+    const eased = t * t;
+    const interval = FAST_INTERVAL + (SLOW_INTERVAL - FAST_INTERVAL) * eased;
+
+    if (slowStep >= SLOWDOWN_STEPS) {
+      // 完全停止
+      phase = "idle";
+      card.classList.remove("spinning");
+      showResult(chosen);
+      fanfare();
+      mainBtn.textContent = "スタート";
+      mainBtn.classList.remove("stopping");
+      mainBtn.disabled = false;
       return;
     }
 
-    // ランダムな番号を表示（最後の数コマは chosen に近づける）
-    const remaining = SPIN_DURATION - elapsed;
+    // 残り数ステップは chosen 周辺をちらつかせる
     let display;
-    if (remaining < 600) {
-      // 残り600ms以下：chosen前後の番号をちらつかせる
-      const offset = randInt(-3, 3);
+    if (slowStep >= SLOWDOWN_STEPS - 4) {
+      const offset = randInt(-2, 2);
       display = ((chosen - 1 + offset + TOTAL) % TOTAL) + 1;
     } else {
       display = randInt(1, TOTAL);
     }
     showNum(display);
+    tick(0.02 + 0.02 * (1 - t)); // だんだん小さい音に
 
-    const interval = currentInterval(elapsed);
-    animTimer = setTimeout(spinStep, interval);
+    animTimer = setTimeout(slowStep_fn, interval);
   }
 
   function startSpin() {
-    spinning = true;
-    startTime = Date.now();
-    chosen = randInt(1, TOTAL);
-
+    clearTimeout(animTimer);
+    phase = "spinning";
     card.classList.add("spinning");
     mainBtn.textContent = "ストップ";
-    mainBtn.classList.add("stopping");
-    mainBtn.disabled = true; // 自動停止なので無効化
-
-    spinStep();
+    mainBtn.classList.remove("stopping");
+    mainBtn.classList.add("stop");
+    mainBtn.disabled = false;
+    // Start音のために AudioContext を起こす
+    getAudio();
+    fastStep();
   }
 
-  function stopSpin() {
-    spinning = false;
+  function triggerStop() {
+    if (phase !== "spinning") return;
+    phase    = "stopping";
+    slowStep = 0;
+    chosen   = randInt(1, TOTAL);
+    mainBtn.classList.remove("stop");
+    mainBtn.classList.add("stopping");
+    mainBtn.disabled = true;
     clearTimeout(animTimer);
-
-    card.classList.remove("spinning");
-    showResult(chosen);
-
-    mainBtn.textContent = "スタート";
-    mainBtn.classList.remove("stopping");
-    mainBtn.disabled = false;
+    slowStep_fn();
   }
 
   mainBtn.addEventListener("click", () => {
-    if (!spinning) startSpin();
+    if (phase === "idle")     startSpin();
+    else if (phase === "spinning") triggerStop();
   });
 </script>
 </body>
