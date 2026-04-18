@@ -24,7 +24,7 @@
   }
 
   .wrap {
-    max-width: 420px;
+    max-width: 400px;
     margin: 0 auto;
     padding: 12px;
   }
@@ -43,18 +43,16 @@
     text-align: center;
   }
 
-  /* ステージ：筆算カード＋ヒントエリア */
+  /* カード表示エリア */
   .stage {
     display: flex;
-    align-items: flex-start;
-    gap: 10px;
+    justify-content: center;
     margin-bottom: 20px;
   }
 
-  /* 筆算カード */
   .card {
-    flex: 1 1 0;
-    min-width: 0;
+    width: 100%;
+    max-width: 300px;
     min-height: 220px;
     background: #fff;
     border-radius: 14px;
@@ -76,12 +74,19 @@
     z-index: 5;
   }
 
-  /* 筆算画像 */
-  .hissanImg {
-    max-width: 160px;
-    max-height: 160px;
-    object-fit: contain;
+  /* 筆算画像ラッパー（ヒント位置の基準点） */
+  .hissanWrap {
+    position: relative;
     display: none;
+    width: 160px;
+    height: 160px;
+  }
+
+  .hissanImg {
+    display: block;
+    width: 160px;
+    height: 160px;
+    object-fit: contain;
     filter: drop-shadow(0 4px 8px rgba(0,0,0,.08));
   }
 
@@ -115,38 +120,51 @@
     animation: glow .4s ease infinite;
   }
 
-  /* ヒントエリア（常にスペース確保） */
-  .hintArea {
-    flex: 0 0 105px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-top: 18px;
-  }
-
-  /* リンゴカード */
-  .hintCard {
-    width: 100%;
-    border-radius: 10px;
+  /*
+   * ヒントカード（数字の右横に絶対配置）
+   *
+   * 768×768 の筆算画像を 160px 表示したとき：
+   *   上の数字の中心 y ≈ 42px（画像高さの約 26%）
+   *   下の数字の中心 y ≈ 102px（画像高さの約 64%）
+   *   数字の右端    x ≈ 141px（画像幅の約 88%）
+   *
+   * → left: 144px（数字右端+3px）で隣に配置
+   * → 高さ 52px はおよそ数字 1 文字分
+   */
+  .hintPip {
+    position: absolute;
+    left: 144px;
+    width: 52px;
+    height: 52px;
+    border-radius: 8px;
     background: #fff;
-    box-shadow: 0 4px 10px rgba(0,0,0,.10);
+    box-shadow: 0 3px 10px rgba(0,0,0,.18);
     overflow: hidden;
     opacity: 0;
-    transform: scale(0.88);
-    transition: opacity .2s ease, transform .2s ease;
+    transform: scale(0.82);
+    transition: opacity .18s ease, transform .18s ease;
     pointer-events: none;
+    z-index: 10;
   }
 
-  .hintCard.show {
+  .hintPip.show {
     opacity: 1;
     transform: scale(1);
     pointer-events: auto;
   }
 
-  .hintCard img {
+  .hintPip img {
     width: 100%;
+    height: 100%;
     display: block;
+    object-fit: contain;
   }
+
+  /* 上の数字に対応（中心 y=42px → top: 42-26=16px） */
+  #hintPip1 { top: 16px; }
+
+  /* 下の数字に対応（中心 y=102px → top: 102-26=76px） */
+  #hintPip2 { top: 76px; }
 
   /* スタート/ストップボタン */
   .btnRow {
@@ -210,20 +228,20 @@
     <p class="title">ひっ算ルーレット</p>
 
     <div class="stage">
-      <!-- 筆算カード -->
       <div class="card" id="card">
-        <img id="hissanImg" class="hissanImg" src="" alt="ひっ算" />
+        <!-- 筆算ラッパー：ヒントピップの位置基準 -->
+        <div id="hissanWrap" class="hissanWrap">
+          <img id="hissanImg" class="hissanImg" src="" alt="ひっ算" />
+          <!-- 上の数字の横（数字と同じサイズ感） -->
+          <div class="hintPip" id="hintPip1">
+            <img id="hintImg1" src="" alt="ヒント（上の数）" />
+          </div>
+          <!-- 下の数字の横 -->
+          <div class="hintPip" id="hintPip2">
+            <img id="hintImg2" src="" alt="ヒント（下の数）" />
+          </div>
+        </div>
         <div id="waitMsg" class="waitMsg">スタートを<br>おしてね！</div>
-      </div>
-
-      <!-- ヒントエリア（常にスペース確保・カードは show クラスで表示） -->
-      <div class="hintArea">
-        <div class="hintCard" id="hintCard1">
-          <img id="hintImg1" src="" alt="ヒント（上の数）" />
-        </div>
-        <div class="hintCard" id="hintCard2">
-          <img id="hintImg2" src="" alt="ヒント（下の数）" />
-        </div>
       </div>
     </div>
 
@@ -241,15 +259,16 @@
   const APPLE_BASE = "https://pokopy-talkpapa.github.io/tashizan-apple/";
   const TOTAL = 81;
 
-  const card      = document.getElementById("card");
-  const hissanImg = document.getElementById("hissanImg");
-  const waitMsg   = document.getElementById("waitMsg");
-  const mainBtn   = document.getElementById("mainBtn");
-  const hintBtn   = document.getElementById("hintBtn");
-  const hintCard1 = document.getElementById("hintCard1");
-  const hintCard2 = document.getElementById("hintCard2");
-  const hintImg1  = document.getElementById("hintImg1");
-  const hintImg2  = document.getElementById("hintImg2");
+  const card       = document.getElementById("card");
+  const hissanWrap = document.getElementById("hissanWrap");
+  const hissanImg  = document.getElementById("hissanImg");
+  const waitMsg    = document.getElementById("waitMsg");
+  const mainBtn    = document.getElementById("mainBtn");
+  const hintBtn    = document.getElementById("hintBtn");
+  const hintPip1   = document.getElementById("hintPip1");
+  const hintPip2   = document.getElementById("hintPip2");
+  const hintImg1   = document.getElementById("hintImg1");
+  const hintImg2   = document.getElementById("hintImg2");
 
   const FAST_INTERVAL  = 55;
   const SLOW_INTERVAL  = 420;
@@ -280,30 +299,28 @@
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
-  // ファイル番号 f から上の数・下の数を取得
-  // 81枚は 1+1〜9+9 の全組み合わせ（f:1=1+1, f:9=1+9, f:10=2+1, ...）
+  // ファイル番号 f → 上の数・下の数
+  // 並び順: 1+1, 1+2, …, 1+9, 2+1, …, 9+9
   function getAddends(f) {
-    const a1 = Math.ceil(f / 9);      // 上の数（1〜9）
-    const a2 = ((f - 1) % 9) + 1;     // 下の数（1〜9）
-    return [a1, a2];
+    return [Math.ceil(f / 9), ((f - 1) % 9) + 1];
   }
 
   function appleUrl(n) {
     return APPLE_BASE + String(n).padStart(2, '0') + ".png";
   }
 
-  // ヒントカード表示を更新
+  // ヒントピップの表示更新
   function updateHintCards(f, show) {
     if (!show || f === null) {
-      hintCard1.classList.remove("show");
-      hintCard2.classList.remove("show");
+      hintPip1.classList.remove("show");
+      hintPip2.classList.remove("show");
       return;
     }
     const [a1, a2] = getAddends(f);
     hintImg1.src = appleUrl(a1);
     hintImg2.src = appleUrl(a2);
-    hintCard1.classList.add("show");
-    hintCard2.classList.add("show");
+    hintPip1.classList.add("show");
+    hintPip2.classList.add("show");
   }
 
   // --- 音 ---
@@ -351,18 +368,16 @@
   // --- 画像表示 ---
   function showImg(n, pop = false) {
     currentFile = n;
-    waitMsg.style.display   = "none";
-    hissanImg.style.display = "block";
+    waitMsg.style.display    = "none";
+    hissanWrap.style.display = "block";
     hissanImg.src = IMG_BASE + n + ".png";
     if (pop) {
       hissanImg.classList.remove("pop");
       void hissanImg.offsetWidth;
       hissanImg.classList.add("pop");
-      // 停止時にヒントが ON なら表示
-      updateHintCards(n, hintVisible);
+      updateHintCards(n, hintVisible); // 停止時、ヒントONなら表示
     } else {
-      // スピン中はヒント非表示
-      updateHintCards(null, false);
+      updateHintCards(null, false);    // スピン中は非表示
     }
   }
 
@@ -439,7 +454,6 @@
   hintBtn.addEventListener("click", () => {
     hintVisible = !hintVisible;
     hintBtn.classList.toggle("active", hintVisible);
-    // 停止中で結果が出ているなら即座に更新
     if (phase === "idle" && currentFile !== null) {
       updateHintCards(currentFile, hintVisible);
     }
